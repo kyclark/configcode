@@ -1,0 +1,2 @@
+# configcode
+ConfigIsCodeIsConfig
