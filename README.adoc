@@ -643,6 +643,116 @@ def main():
 <4> The `args.file` value will be a `list` of one or more _open file handles_.
 <5> Need to close the file handle for `gdal.Open()` to work.
 <6> Pass the file's name.
+
+=== Processing the files
+
+In the original "testing.py," the `process_files()` function needs to decide if the arguments to the program are files or directories the latter of which it will walk to find files:
+
+----
+def process_files():
+    """Processes the command line file/folder arguments
+    """
+    argc = len(sys.argv) <1>
+    if argc: <2>
+        print("Filename," + _get_variables_header_fields())
+        for idx in range(1, argc): <3>
+            cur_path = sys.argv[idx]
+            if not os.path.isdir(cur_path): <4>
+                run_test(cur_path)
+            else:
+                allfiles = [os.path.join(cur_path, fn) for fn in os.listdir(cur_path)  if  os.path.isfile(os.path.join(cur_path, fn))] <5>
+                for one_file in allfiles:
+                    run_test(one_file)
+----
+
+<1> This function separately parses the command-line arguments making this an impure function. Recommend that the arguments be parsed in one place (e.g., something like `get_args()`) and those values passed in. The `typing` module has a `TextIO` type that could be used in the function signature like `process_files(List[TextIO])` which would make it easier to validate and check with `mypy`.
+<2> Another instance of using a sequence's length without comparison (see above). Better to say `if sys.argv:`. Of greater concern is that there is no `else`. Should something happen if no files are passed? 
+<3> This is a very C-like `for` loop using the index positions of the list. If the arguments were taken like `args = sys.argv[1:]` then you could use a more Pythonic `for arg in args:` here.
+<4> Recommend to avoid `not` and rather accentuate the positive. Change to `if os.path.isfile(cur_path)` and swap the blocks.
+<5> Extremely long line that should be broken up. Use a code formatter like `yapf` to fix. Also consider using Python `glob` library to recursively find files (https://docs.python.org/3/library/glob.html).
+
+Note that all this code is obviated by the version I show that requires the files to be passed as arguments to the program.
+
+Also note that this function marches to 5 levels of indentation which seems a bit much to me (cf https://stackoverflow.com/questions/10959683/preferred-maximum-indentation-in-python). 
+
+=== Running a test
+
+The "testing.py" has a function called `run_test()` that accepts a filename, processes it with the `algorithm_rgb.calculate()` function, and raises an exception if it encounters a problem:
+
+----
+def run_test(filename):
+    """Runs the extractor code using pixels from the file
+    Args:
+        filename(str): Path to image file
+    Return:
+        The result of calling the extractor's calculate() method
+    Notes:
+        Assumes the path passed in is valid. An error is reported if
+        the file is not an image file.
+    """
+    try:
+        open_file = gdal.Open(filename)
+        if open_file:
+            # Get the pixels and call the calculation
+            pix = np.array(open_file.ReadAsArray())
+            calc_val = algorithm_rgb.calculate(np.rollaxis(pix, 0, 3)) <1>
+
+            # Check for unsupported types
+            if isinstance(calc_val, set): <2>
+                raise RuntimeError("A 'set' type of data was returned and isn't supported.  Please use a list or a tuple instead") <3>
+
+            # Perform any type conversions to a printable string
+            if isinstance(calc_val, str): <4>
+                print_val = calc_val
+            else:
+                # Check if the return is iterable and comma separate the values if it is
+                try:
+                    _ = iter(calc_val) <5>
+                    print_val = ",".join(map(str, calc_val))
+                except Exception:
+                    print_val = str(calc_val)
+
+            print(filename + "," + print_val)
+    except Exception as ex:
+        sys.stderr.write("Exception caught: " + str(ex) + "\n")
+        sys.stderr.write("    File: " + filename + "\n")
+----
+
+<1> Quite a bit happens before the `calculate()` function is called. I have yet to look into the code that would call this function, so I have to assume this will be handled elsewhere and this function is assumed to handle only a matrix of pixels.
+<2> Rather than checking for what is *not* allowed (here a `set`), maybe check that it's something that *is* allowed, i.e., `list` or `tuple`. Another instance where type hints could help? Lists and tuples are sort of interchangeable, but I would suggest allowing only one type from a function. I would probably choose a `tuple` given their immutability.
+<3> Why raise a `RuntimeError` when the `except` handles nothing but a generic `Exception`?
+<4> It would appear that the `calculate()` function is allowed to return lists, tuples, and strings, which seems incredibly dangerous to me. A function should return only one type. The `typing.Optional` or `typing.Union` might be useful here if it's necessary to return `None` or you really need to mix strings and lists, but it still seems like a very bad idea.
+<5> Here the `iter()` function is being called to see if it will produce an exception which seems like a really bad idea. Also note that dictionaries and file handles are iterable and so would pass this line.
+
+NOTE: This another function with 5 levels of indentation and includes try/catch inside try/catch, both of which strike me as too complicated.
+
+The most notable problem with this function is that it _never verifies that the `algorithm_rgb.calculate()` function returns the correct answer_.
+For instance, I can change the function to this:
+
+----
+def calculate(pxarray: np.ndarray) -> list:
+    pass
+----
+
+And then run the program:
+
+----
+$ ./testing.py ../sample_plots/*
+Filename,excess greenness index - excess_greenness_index ([-510:510]), green leaf index -  green_leaf_index ( [-1:1]), cive -  cive ( [-255:255]), normalized difference index -  normalized_difference_index(pxarray) ( [-127:129]), excess red -  excess_red ( [-255:255]), exgr -  exgr ( [-255:332]), combined indices 1 -  combined_indices_1 ( [-1000:1000]), combined indices 2 -  combined_indices_2 ( [-1000:1000]), vegetative index -  vegetative_index ( [-255:255]), normalized green-red difference -  ngrdi ( [-255:255]), percent green -  percent_green ( [0:100]),
+../sample_plots/rgb_17_7_W.tif,None
+../sample_plots/rgb_1_2_E.tif,None
+../sample_plots/rgb_33_8_W.tif,None
+../sample_plots/rgb_40_11_W.tif,None
+../sample_plots/rgb_5_11_W.tif,None
+../sample_plots/rgb_6_1_E.tif,None
+----
+
+**A test should use a known input and verify that a function/program will produce an expected output.**
+
+The https://github.com/kyclark/configcode/blob/master/testing/testing.py version uses this same `run_test()` and so is not a recommended solution. 
+That program is merely provided to demonstrate how the original program can be shortened from 151 lines of code (LOC) to 85 all while using standard modules.
+
+=== A different testing scheme
 	
 == Author 
 
