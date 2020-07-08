@@ -1,0 +1,468 @@
+= Configuration and Testing Ideas for algorithm_rbg.py
+
+A review of `algorithm_rgb.py`:
+
+* Meta information encoded as package variables, accessed with `hasattr()` and `getattr()`
+* Lack of tests
+* Add use of types
+
+== Encoding metainformation
+
+Currently the `algorithm_rbg` uses top-level, global variables to define meta-information about the module, e.g.:
+
+----
+# Definitions
+VERSION = '1.0'
+
+# Information on the creator of this algorithm
+ALGORITHM_AUTHOR = 'Chris Schnaufer, Clairessa Brown, David Lebauer'
+ALGORITHM_AUTHOR_EMAIL = 'schnaufer@arizona.edu, clairessabrown@email.arizona.edu, dlebauer@email.arizona.edu'
+ALGORITHM_CONTRIBUTORS = ["Jacob van der Leeuw"]
+----
+
+Question: Why is `ALGORITHM_CONTRIBUTORS` defined as a `list` but `ALGORITHM_AUTHOR`/`ALGORITHM_AUTHOR_EMAIL` are defined as a `str`?
+It would seem all of these would be lists.
+
+One immediate danger is that these are still *variables* and as such are *mutable*:
+
+----
+>>> import algorithm
+>>> algorithm.VERSION
+'1.0'
+>>> algorithm.VERSION = 'foobar'
+>>> algorithm.VERSION
+'foobar'
+----
+
+NOTE: There are many instances of lines exceeding 79 characters in length such as the `ALGORITHM_AUTHOR_EMAIL` or this:
+
+----
+ALGORITHM_DESCRIPTION = 'This algorithm performs a variety of calculations using RGB pixels from images in order' \
+                        'to assess plant and crop health and growth'
+----
+
+According to PEP8 (https://www.python.org/dev/peps/pep-0008/#maximum-line-length): "Limit all lines to a maximum of 79 characters."
+
+One way to fix this is to use the implicit concatenation of adjacent strings (https://www.python.org/dev/peps/pep-3126/):
+
+----
+ALGORITHM_DESCRIPTION = ('This algorithm performs a variety of '
+    'calculations using RGB pixels from images in order'
+    'to assess plant and crop health and growth')
+----
+
+Or use `+` to join shorter strings:
+
+----
+ALGORITHM_DESCRIPTION = 'This algorithm performs a variety of ' + \
+    'calculations using RGB pixels from images in order' + \
+    'to assess plant and crop health and growth'
+----
+
+Or a join:
+
+----
+ALGORITHM_DESCRIPTION = ''.join([
+    'This algorithm performs a variety of'
+    'calculations using RGB pixels from images in order'
+    'to assess plant and crop health and growth'])
+----
+
+To access these values, the `testing.py` program uses the `hasattr()` function, e.g.:
+
+----
+if not hasattr(algorithm_rgb, 'VARIABLE_NAMES')
+----
+
+The `hasattr()` function is problematic as it calls `getattr()` and checks for an exception.
+The article https://hynek.me/articles/hasattr/ does a good job explaining why this is not an ideal way to check for the existence of a property or method using this function, so I would recommend discontinuing its use.
+
+At the least, it would seem better to replace all `hasattr()` calls with `getattr()` using a default value.
+
+Also, why have 14 different variables, all of which are `str` types with the exception of the `ALGORITHM_CONTRIBUTORS` (cf "stringly typed" code: https://wiki.c2.com/?StringlyTyped, https://www.techopedia.com/definition/31876/stringly-typed)?
+
+----
+VERSION
+ALGORITHM_AUTHOR
+ALGORITHM_AUTHOR_EMAIL
+ALGORITHM_CONTRIBUTORS
+ALGORITHM_NAME
+ALGORITHM_DESCRIPTION
+CITATION_AUTHOR
+CITATION_TITLE
+CITATION_YEAR
+VARIABLE_NAMES
+VARIABLE_UNITS
+VARIABLE_LABELS
+WRITE_BETYDB_CSV
+WRITE_GEOSTREAMS_CSV
+----
+
+If you used a `dict` for this information, then you'd only be exporting one value:
+
+----
+CONFIG = {
+    'VERSION': '',
+    'ALGORITHM_AUTHOR': '',
+    'ALGORITHM_AUTHOR_EMAIL': '',
+    'ALGORITHM_CONTRIBUTORS': '',
+    'ALGORITHM_NAME': '',
+    'ALGORITHM_DESCRIPTION': '',
+    'CITATION_AUTHOR': '',
+    'CITATION_TITLE': '',
+    'CITATION_YEAR': '',
+    'VARIABLE_NAMES': '',
+    'VARIABLE_UNITS': '',
+    'VARIABLE_LABELS': '',
+    'WRITE_BETYDB_CSV': '',
+    'WRITE_GEOSTREAMS_CSV': ''}
+----
+
+Or eschew `getattr()` to directly access a module's value and rather call a function that returns this?
+
+----
+def config() -> dict:
+    return {
+        'VERSION': '',
+        'ALGORITHM_AUTHOR': '',
+        'ALGORITHM_AUTHOR_EMAIL': '',
+        'ALGORITHM_CONTRIBUTORS': '',
+        'ALGORITHM_NAME': '',
+        'ALGORITHM_DESCRIPTION': '',
+        'CITATION_AUTHOR': '',
+        'CITATION_TITLE': '',
+        'CITATION_YEAR': '',
+        'VARIABLE_NAMES': '',
+        'VARIABLE_UNITS': '',
+        'VARIABLE_LABELS': '',
+        'WRITE_BETYDB_CSV': '',
+        'WRITE_GEOSTREAMS_CSV': ''}
+----
+
+Or define a `type`/`class` to represent this as an immutable `NamedTuple`:
+
+----
+from typing import NamedTuple, List
+
+
+class Config(NamedTuple):
+    version: str
+    algorithm_author: List[str]
+    algorithm_author_email: List[str]
+    algorithm_contributors: List[str]
+    algorithm_name: str
+    algorithm_description: str
+    citation_author: str
+    citation_title: str
+    citation_year: str
+    variable_names: List[str]
+    variable_units: List[str]
+    variable_labels: List[str]
+    write_betydb_csv: bool
+    write_geostreams_csv: bool
+----
+
+And then return a `Config` from the function which can by type-checked by `mypy`:
+
+----
+from config import Config
+
+
+def config() -> Config:
+    return Config(version='1.0',
+                  algorithm_author=[
+                      'Chris Schnaufer', 'Clairessa Brown', 'David Lebauer'
+                  ],
+                  algorithm_author_email=[
+                      'schnaufer@arizona.edu',
+                      'clairessabrown@email.arizona.edu',
+                      'dlebauer@email.arizona.edu'
+                  ],
+                  algorithm_contributors=["Jacob van der Leeuw"],
+                  algorithm_name='Greenness Transformer',
+                  algorithm_description=(
+                      'This algorithm performs a variety of '
+                      'calculations using RGB pixels from images in order '
+                      'to assess plant and crop health and growth'),
+                  citation_author='Clairessa Brown',
+                  citation_title='Woebbecke, D.M. et al',
+                  citation_year='2020',
+                  variable_names=[
+                      'excess greenness index', 'green leaf index', 'cive',
+                      'normalized difference index', 'excess red', 'exgr',
+                      'combined indices 1', 'combined indices 2',
+                      'vegetative index', 'normalized green-red difference',
+                      'percent green'
+                  ],
+                  variable_units=[
+                      '[-510:510]', '[-1:1]', '[-255:255]', '[-127:129]',
+                      '[-255:255]', '[-255:332]', '[-1000:1000]',
+                      '[-1000:1000]', '[-255:255]', '[-255:255]', '[0:100]'
+                  ],
+                  variable_labels=[
+                      'excess_greenness_index', 'green_leaf_index', 'cive',
+                      'normalized_difference_index(pxarray)', 'excess_red',
+                      'exgr', 'combined_indices_1', 'combined_indices_2',
+                      'vegetative_index', 'ngrdi', 'percent_green'
+                  ],
+                  write_betydb_csv=True,
+                  write_geostreams_csv=True)
+----
+
+Much easier to test, too:
+
+----
+import algorithm
+from config import Config
+from typing import List
+
+def test_config():
+    conf = algorithm.config()
+    assert conf
+    assert type(conf) == Config
+    assert type(conf.version) == str
+    assert type(conf.algorithm_author) == list
+    assert type(conf.algorithm_author_email) == list
+    assert type(conf.write_betydb_csv) == bool
+----
+
+Which leads me to ask if it's necessary to encode this metadata into the module.
+This is static information that essentially is configuration.
+Further, nothing inside the `algorithm_rgb` module uses this information (but maybe it should?).
+So perhaps this would be better encoded as JSON that lives in the same directory as the module?
+
+You could still have this available from a function:
+
+----
+import json
+import os
+
+
+def config() -> dict:
+    file = os.path.join(os.path.dirname(__file__), 'config.json')
+    with open(file) as fh:
+        return json.load(fh)
+----
+
+Called like so:
+
+----
+import algorithm
+
+print(algorithm.config())
+----
+
+You could even have this structure be typed.
+Consider a small example:
+
+----
+$ cat config.json
+{
+    "version": "1.0",
+    "author": ["Chris Schnaufer", "Ken Youens-Clark"],
+    "author_email": ["schnaufer@arizona.edu", "kyclark@arizona.edu"],
+    "write_betydb_csv": true
+}
+----
+
+Where we define a `Config` type like so:
+
+----
+$ cat config.py
+from typing import NamedTuple, List
+
+
+class Config(NamedTuple):
+    version: str
+    author: List[str]
+    author_email: List[str]
+    write_betydb_csv: bool
+----
+
+Which is used by the "algorithm":
+
+----
+import json
+import os
+from config import Config
+
+
+def config() -> Config:
+    file = os.path.join(os.path.dirname(__file__), 'config.json')
+    with open(file) as fh:
+        return Config(**json.load(fh))
+----
+
+Which we can call like so:
+
+----
+$ cat main.py
+#!/usr/bin/env python3
+
+import algorithm
+
+print(algorithm.config())
+----
+
+Which will produce a typed, immutable object:
+
+----
+$ ./main.py
+Config(version='1.0', author=['Chris Schnaufer', 'Ken Youens-Clark'], author_email=['schnaufer@arizona.edu', 'kyclark@arizona.edu'], write_betydb_csv=True)
+----
+
+Were this information to be stored as JSON, it still begs the question of how to produce valid JSON, so it would be good to consider a proper configuration language like Dhall.
+In this version, I create the "author" as a structure that includes both the "name" and "email" so that it cannot be possible to generate a configuration that leaves out one of these values.
+The same could/should be done for the variable name/label/unit:
+
+----
+$ cat config.dhall
+-- ./config.dhall
+
+let Prelude =
+      https://prelude.dhall-lang.org/v11.1.0/package.dhall sha256:99462c205117931c0919f155a6046aec140c70fb8876d208c7c77027ab19c2fa
+
+
+let Author = { name : Text, email : Text }
+
+let authors
+    : List Author
+    = [ { name = "Chris Schnaufer", email = "schnaufer@arizona.edu" }
+      , { name = "Ken Youens-Clark", email = "kyclark@arizona.edu" }
+      ]
+
+in  { authors = authors
+    , version = "1.0"
+    , write_betydb_csv = True
+    }
+----
+
+From which we can derive JSON:
+
+----
+$ dhall-to-json --file config.dhall --output config.json
+$ cat config.json
+{
+  "authors": [
+    {
+      "email": "schnaufer@arizona.edu",
+      "name": "Chris Schnaufer"
+    },
+    {
+      "email": "kyclark@arizona.edu",
+      "name": "Ken Youens-Clark"
+    }
+  ],
+  "version": "1.0",
+  "write_betydb_csv": true
+}
+----
+
+The `Config` class would likewise need to be changed to reflect this.
+
+NOTE: Should every algorithm return the same structure/metadata. That is, are the 14 above listed fields exhaustive or just the minimal set? Can an algorithm return other/more/less data?
+
+== Return from algorithm_rbg.calculate()
+
+The `algorithm_rbg.calculate()` function currently returns a list of floating-point values, but the type is annotated to just a `list`:
+
+----
+def calculate(pxarray: np.ndarray) -> list:
+	return [
+	    excess_greenness_index(pxarray),
+	    green_leaf_index(pxarray),
+	    cive(pxarray),
+	    normalized_difference_index(pxarray),
+	    excess_red(pxarray),
+	    exgr(pxarray),
+	    combined_indices_1(pxarray),
+	    combined_indices_2(pxarray),
+	    vegetative_index(pxarray),
+	    ngrdi(pxarray),
+	    percent_green(pxarray)
+	]
+----
+
+Recommend at least annotating return value as `List[float]`.
+
+What does the calling code expect?
+Is every algorithm expected to return the same thing?
+
+Should this perhaps return a `dict` (or `TypedDict`) so that the values are explicitly available by name rather than assumed to be in position?
+
+----
+return {
+    'excess_greenness_index': excess_greenness_index(pxarray),
+    'green_leaf_index': green_leaf_index(pxarray),
+    'cive': cive(pxarray),
+    'normalized_difference_index': normalized_difference_index(pxarray),
+    'excess_red': excess_red(pxarray),
+    'exgr': exgr(pxarray),
+    'combined_indices_1': combined_indices_1(pxarray),
+    'combined_indices_2': combined_indices_2(pxarray),
+    'vegetative_index': vegetative_index(pxarray),
+    'ngrdi': ngrdi(pxarray),
+    'percent_green': percent_green(pxarray)
+}
+----
+
+This could, of course, just as easily be a list of tuple with ("name", "value").
+
+Could this be better handled as a new `type` (perhaps based on `NamedTuple`)?
+For instance, I see that `testing._get_variables_header_fields()` inspects the meta data from `algorithm_rbg` for `VARIABLE_NAMES`, `VARIABLE_LABELS`, and `VARIABLE_UNITS`, verifies that these are all the same length, and then returns a `str`.
+Does some other code use these values to match up with the measurements?
+Should that data be included with the return values for each?
+
+That is, `excess_greenness_index()` currently returns a `float`.
+Should it instead return a record that includes:
+
+* value: `float`
+* name: `str`
+* unit: `str`
+* label: `str`
+
+I notice the "unit" for this measurement is a `str` like "[-510:510]" which follows a pattern for all the other units that look like possible `[low:high]` values for this value.
+Could this be better represented as a `tuple` like `(-510, 510)`?
+This in turn could become a `NewType` possible:
+
+----
+>>> from typing import NewType, Tuple
+>>> Unit = NewType('Unit', Tuple[float, float])
+>>> unit1 = Unit((-510, 501))
+>>> type(unit1)
+<class 'tuple'>
+>>> unit1
+(-510, 501)
+----
+
+Then you could use type checking to verify the return with a type:
+
+----
+Unit = NewType('Unit', Tuple[float, float])
+class Measurement(NamedTuple):
+    value: float
+    name: str
+    label: str
+    unit: Unit
+
+
+def excess_greenness_index(pxarray: np.ndarray) -> Measurement:
+    red, green, blue = get_red_green_blue_averages(pxarray)
+    return Measurement(
+        value = round(2 * green - (red + blue), 2),
+        name = 'excess greenness index',
+        label = 'excess_greenness_index',
+        unit = Unit((-510, 501)))
+----
+
+Then you get an immutable, typed value back from the function:
+
+----
+>>> import algorithm_rgb_type as a2
+>>> a2.excess_greenness_index(pix1)
+Measurement(value=14.0, name='excess greenness index', label='excess_greenness_index', unit=(-510, 501))
+----
+	
+== Author 
+
+Ken Youens-Clark <kyclark@arizona.edu>
