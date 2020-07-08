@@ -3,6 +3,7 @@ Greenness Transformer
 """
 
 import numpy as np
+from typing import List
 
 
 def excess_greenness_index(pxarray: np.ndarray) -> float:
@@ -130,7 +131,7 @@ def get_red_green_blue_averages(pxarray: np.ndarray) -> tuple:
     return (red, green, blue)
 
 
-def calculate(pxarray: np.ndarray) -> list:
+def calculate(pxarray: np.ndarray) -> List[float]:
     """Calculates one or more values from plot-level RGB data
     Arguments:
         pxarray: Array of RGB data for a single plot

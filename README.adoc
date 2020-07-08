@@ -753,7 +753,264 @@ The https://github.com/kyclark/configcode/blob/master/testing/testing.py version
 That program is merely provided to demonstrate how the original program can be shortened from 151 lines of code (LOC) to 85 all while using standard modules.
 
 === A different testing scheme
+
+I have provided a separate https://github.com/kyclark/configcode/blob/master/testing/test.py that demonstrates how `pytest` can be used to create unit tests for the https://github.com/kyclark/configcode/blob/master/testing/algorithm_rgb.py file.
+
+NOTE: Is it possible for any of the functions to return anything other than a `float`? That is, the tests only use good input files. What would happen if a corrupted file were used or one that could conceivably create values of 0 for R+G+B which I see is used as a denominator in division.
+
+Here is a simple testing file which uses two known files (`input1` and `input2`) and verifies that each function in the `algorithm_rgb` will return the correct value:
+
+----
+import algorithm_rgb as al
+import os
+import osgeo.gdal as gdal
+import numpy as np
+import json
+
+input1 = './test_input/rgb_1_2_E.tif'
+input2 = './test_input/rgb_40_11_W.tif'
+meta = './meta.json'
+
+
+# --------------------------------------------------
+def test_input_files():
+    """Test input files exist"""
+
+    assert os.path.isfile(input1)
+    assert os.path.isfile(input2)
+
+
+# --------------------------------------------------
+def test_get_red_green_blue_averages():
+    """Test get_red_green_blue_averages"""
+
+    assert al.get_red_green_blue_averages(
+        read_input(input1)) == (166.8537142857143, 160.37885714285713,
+                                139.89971428571428)
+
+    assert al.get_red_green_blue_averages(
+        read_input(input2)) == (109.85485714285714, 144.25085714285714, 90.381)
+
+
+# --------------------------------------------------
+def test_excess_greenness_index():
+    """Test excess_greenness_index"""
+
+    assert al.excess_greenness_index(read_input(input1)) == 14.0
+    assert al.excess_greenness_index(read_input(input2)) == 88.27
+
+
+# --------------------------------------------------
+def test_green_leaf_index():
+    """Test green_leaf_index"""
+
+    assert al.green_leaf_index(read_input(input1)) == 0.02
+    assert al.green_leaf_index(read_input(input2)) == 0.18
+
+
+# --------------------------------------------------
+def test_cive():
+    """Test cive"""
+
+    assert al.cive(read_input(input1)) == 16.16
+    assert al.cive(read_input(input2)) == -14.96
+
+
+# --------------------------------------------------
+def test_normalized_difference_index():
+    """Test normalized_difference_index"""
+
+    assert al.normalized_difference_index(read_input(input1)) == -1.53
+    assert al.normalized_difference_index(read_input(input2)) == 18.33
+
+
+# --------------------------------------------------
+def test_excess_red():
+    """Test excess_red"""
+
+    assert al.excess_red(read_input(input1)) == 56.53
+    assert al.excess_red(read_input(input2)) == -1.44
+
+
+# --------------------------------------------------
+def test_exgr():
+    """Test exgr"""
+
+    assert al.exgr(read_input(input1)) == -42.53
+    assert al.exgr(read_input(input2)) == 89.71
+
+
+# --------------------------------------------------
+def test_combined_indices_1():
+    """Test combined_indices_1"""
+
+    assert al.combined_indices_1(read_input(input1)) == 30.16
+    assert al.combined_indices_1(read_input(input2)) == 73.31
+
+
+# --------------------------------------------------
+def test_combined_indices_2():
+    """Test combined_indices_2"""
+
+    assert al.combined_indices_2(read_input(input1)) == 12.81
+    assert al.combined_indices_2(read_input(input2)) == 24.98
+
+
+# --------------------------------------------------
+def test_vegetative_index():
+    """Test vegetative_index"""
+
+    assert al.vegetative_index(read_input(input1)) == 1.02
+    assert al.vegetative_index(read_input(input2)) == 1.4
+
+
+# --------------------------------------------------
+def test_ngrdi():
+    """Test ngrdi"""
+
+    assert al.ngrdi(read_input(input1)) == -0.02
+    assert al.ngrdi(read_input(input2)) == 0.14
+
+
+# --------------------------------------------------
+def test_percent_green():
+    """Test percent_green"""
+
+    assert al.percent_green(read_input(input1)) == 0.34
+    assert al.percent_green(read_input(input2)) == 0.42
+
+
+# --------------------------------------------------
+def test_calculate():
+    """Test calculate"""
+
+    assert al.calculate(read_input(input1)) == [
+        14.0, 0.02, 16.16, -1.53, 56.53, -42.53, 30.16, 12.81, 1.02, -0.02,
+        0.34
+    ]
+
+    assert al.calculate(read_input(input2)) == [
+        88.27, 0.18, -14.96, 18.33, -1.44, 89.71, 73.31, 24.98, 1.4, 0.14, 0.42
+    ]
+
+
+# --------------------------------------------------
+def read_input(file) -> np.ndarray:
+    """Run calculate on a file"""
 	
+    if fh := gdal.Open(file):
+        pix = np.array(fh.ReadAsArray())
+        return np.rollaxis(pix, 0, 3)
+
+
+# --------------------------------------------------
+def test_meta():
+    """Test meta"""
+
+    assert os.path.isfile(meta)
+    data = json.load(open(meta))
+    assert data['authors']
+----
+
+Using `pytest` to run this test suite will produce a familiar output:
+
+----
+$ pytest -xv test.py
+============================= test session starts ==============================
+...
+
+test.py::test_input_files PASSED                                         [  6%]
+test.py::test_get_red_green_blue_averages PASSED                         [ 13%]
+test.py::test_excess_greenness_index PASSED                              [ 20%]
+test.py::test_green_leaf_index PASSED                                    [ 26%]
+test.py::test_cive PASSED                                                [ 33%]
+test.py::test_normalized_difference_index PASSED                         [ 40%]
+test.py::test_excess_red PASSED                                          [ 46%]
+test.py::test_exgr PASSED                                                [ 53%]
+test.py::test_combined_indices_1 PASSED                                  [ 60%]
+test.py::test_combined_indices_2 PASSED                                  [ 66%]
+test.py::test_vegetative_index PASSED                                    [ 73%]
+test.py::test_ngrdi PASSED                                               [ 80%]
+test.py::test_percent_green PASSED                                       [ 86%]
+test.py::test_calculate PASSED                                           [ 93%]
+test.py::test_meta PASSED                                                [100%]
+
+============================== 15 passed in 0.20s ==============================
+----
+
+To demonstrate the output when code is failing, I can introduce an error like so:
+
+----
+def test_cive():
+    """Test cive"""
+
+    assert al.cive(read_input(input1)) == None # 16.16 <<<< Changing to None
+    assert al.cive(read_input(input2)) == -14.96
+----
+
+And now the test output reads:
+
+----
+$ pytest -xv test.py
+============================= test session starts ==============================
+...
+
+test.py::test_input_files PASSED                                         [  6%]
+test.py::test_get_red_green_blue_averages PASSED                         [ 13%]
+test.py::test_excess_greenness_index PASSED                              [ 20%]
+test.py::test_green_leaf_index PASSED                                    [ 26%]
+test.py::test_cive FAILED                                                [ 33%]
+
+=================================== FAILURES ===================================
+__________________________________ test_cive ___________________________________
+
+    def test_cive():
+        """Test cive"""
+
+>       assert al.cive(read_input(input1)) == None # 16.16
+E       assert 16.16 == None
+E         +16.16
+E         -None
+
+test.py:52: AssertionError
+=========================== short test summary info ============================
+FAILED test.py::test_cive - assert 16.16 == None
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+========================= 1 failed, 4 passed in 0.51s ==========================
+----
+
+The `pytest` module will integrate with the `coverage` (https://coverage.readthedocs.io/en/coverage-5.2/) module to help determine how much of the code is covered by tests:
+
+----
+$ coverage run -m pytest test.py
+============================= test session starts ==============================
+...
+
+test.py ...............                                                  [100%]
+
+============================== 15 passed in 0.24s ==============================
+$ coverage report
+Name               Stmts   Miss  Cover
+--------------------------------------
+algorithm_rgb.py      41      0   100%
+test.py               58      0   100%
+--------------------------------------
+TOTAL                 99      0   100%
+----
+
+These unit tests cover all the functions in the `algorithm_rgb.py` module.
+
+== Summary
+
+I have only investigated how to use `pytest` to create unit tests for the given module.
+I do not know to what extent contributors of algorithms will be expected to create such tests.
+This may or may not be beyond the capabilities of the typical programmer, but I believe a thorough explanation and demonstration will encourage people to contribute a full test suite.
+I especially feel that the functional nature of `pytest` makes it rather easy to create and run tests (as opposed to an object-oriented test suite, cf https://docs.python.org/3/library/unittest.html).
+
+== Going further
+
+Next I need to see how an algorithm is integrated into a greater system which is probably where more intense and focused testing should occur.
+
 == Author 
 
 Ken Youens-Clark <kyclark@arizona.edu>
