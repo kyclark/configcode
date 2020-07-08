@@ -1,0 +1,14 @@
+{
+  "authors": [
+    {
+      "email": "schnaufer@arizona.edu",
+      "name": "Chris Schnaufer"
+    },
+    {
+      "email": "kyclark@arizona.edu",
+      "name": "Ken Youens-Clark"
+    }
+  ],
+  "version": "1.0",
+  "write_betydb_csv": true
+}
