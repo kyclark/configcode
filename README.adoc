@@ -1,10 +1,6 @@
 = Configuration and Testing Ideas for algorithm_rbg.py
 
-A review of `algorithm_rgb.py`:
-
-* Meta information encoded as package variables, accessed with `hasattr()` and `getattr()`
-* Lack of tests
-* Add use of types
+A review of `algorithm_rgb.py`.
 
 == Encoding metainformation
 
@@ -79,7 +75,7 @@ The article https://hynek.me/articles/hasattr/ does a good job explaining why th
 
 At the least, it would seem better to replace all `hasattr()` calls with `getattr()` using a default value.
 
-Also, why have 14 different variables, all of which are `str` types with the exception of the `ALGORITHM_CONTRIBUTORS` (cf "stringly typed" code: https://wiki.c2.com/?StringlyTyped, https://www.techopedia.com/definition/31876/stringly-typed)?
+Also, why have 14 different variables, all of which are `str` types with the exception of the `ALGORITHM_CONTRIBUTORS` which is a `list` (cf "stringly typed" code: https://wiki.c2.com/?StringlyTyped, https://www.techopedia.com/definition/31876/stringly-typed)?
 
 ----
 VERSION
@@ -462,6 +458,191 @@ Then you get an immutable, typed value back from the function:
 >>> a2.excess_greenness_index(pix1)
 Measurement(value=14.0, name='excess greenness index', label='excess_greenness_index', unit=(-510, 501))
 ----
+
+== Testing
+
+The current https://github.com/AgPipeline/transformer-rgb-indices/blob/master/testing.py program demonstrates a way to use the `algorithm_rgb.py` module to see if works in some way, but it falls short of fully testing the module/functions.
+This program also manages a number of tasks manually that would be better done using standard modules.
+
+=== Parsing command-line arguments
+
+The "testing.py" module has two functions associated with handling arguments and printing the usage:
+
+----
+def check_arguments():
+    """Checks that we have script argument parameters that appear valid
+    """
+    argc = len(sys.argv) <1>
+    if argc < 2: <2>
+        sys.stderr.write("One or more paths to images need to be specified on the command line\n")
+        print_usage()
+        return False <3>
+
+    # Check that the paths exist.
+    have_errors = False
+    for idx in range(1, argc): <4>
+        if not os.path.exists(sys.argv[idx]): <5>
+            print("The following path doesn't exist: " + sys.argv[idx])
+            have_errors = True
+
+    if have_errors:
+        sys.stderr.write("Please correct any problems and try again\n")
+
+    return not have_errors <6>
+	
+def print_usage():
+    """Displays information on how to use this script
+    """
+    argc = len(sys.argv) <7>
+    if argc:
+        our_name = os.path.basename(sys.argv[0]) <8>
+    else:
+        our_name = os.path.basename(__file__)
+    print(our_name + " <folder>|<filename> ...") <9>
+    print("    folder:   path to folder containing images to process") <10>
+    print("    filename: path to an image file to process")
+    print("") <11>
+    print("  One or more folders and/or filenames can be used")
+    print("  Only files at the top level of a folder are processed")
+----
+
+<1> `sys.argv` is a `list` containing the path to the currently running program (i.e., the "testing.py" program itself) followed by any other values. This program appears to rely upon positional parameters only, so no named options. If necessary to manually handle `sys.argv`, recommend at least to use `sys.argv[1:]` so as to skip the program name and only handle the actual arguments as this will help avoid off-by-one errors.
+<2> We really only need 1 argument, but the off-by-one problem shows here.
+<3> Three lines of code to handle printing an error, usage, and returning a `False` value from the function, but nothing here will make the program itself return an error code to the command line. See below.
+<4> Another instance of needing to skip the first value as this is not actually an argument. 
+<5> Manually checking that a given argument exists which could mean either a directory or a file.
+<6> Recommend always using positive variable names like "is_ok" with default of `True` and setting to `False` when there is a problem so that you can `return is_ok`. The brain has to work extra to work out the negative of `not have_errors`.
+<7> The `argc` variable is used just once. If you change the coee to `if len(sys.argv):` then `pylint` would complain "Do not use `len(SEQUENCE)` without comparison to determine if a sequence is empty (len-as-condition)". The more common idiom would be `if sys.argv:`.
+<8> Given the binary choice, an `if` expression would be better (see below). Also, this code relies on the fact that Python's variable scoping is really terrible. In a stricter language, `our_name` would not be visible after the `if`/`else` block, but in Python it is. Recommend to initialize the variable before the block or better to use an `if` expression.
+<9> Manually printing the usage.
+<10> These 5 separate `print()` calls could be handled with one `print()` where the text is provided using a single triple-quoted (`"""`) string which is more idiomatic.
+<11> Note that `print()` (with no arguments) will accomplish the same thing as this.
+
+
+Remark #1 above relies on a strange behavior of Python in that requesting list slices for non-existent ranges will result in an empty list rather than an exception:
+
+----
+>>> x = ['foo', 'bar']
+>>> x[10:]
+[]
+----
+
+Remark #3 above is due to how this function is called:
+
+----
+if __name__ == "__main__":
+    if check_arguments() and check_configuration():
+        process_files()
+----
+
+If `check_arguments()` returns `False`, then `process_files()` never executes, but nothing ever tells the program to exit with a non-zero value.
+One way to fix this would be to add an explicit `sys.exit()` call:
+
+----
+if __name__ == "__main__":
+    if check_arguments() and check_configuration():
+        process_files()
+    else:
+        sys.exit(1)
+----
+
+Note that calling `sys.exit()` with a `str` value will cause the `str` to be printed to `sys.stderr` and the program to exit with the value `1`:
+
+----
+if __name__ == "__main__":
+    if check_arguments() and check_configuration():
+        process_files()
+    else:
+        sys.exit('Something went wrong')
+----
+
+Remark #8, recommend rewriting as such:
+
+----
+our_name = os.path.basename(sys.argv[0] if sys.argv else __file__)
+----
+
+Lastly, while this program will produce a usage, it does not respond to the standard `-h` or `--help` flags for usage:
+
+----
+$ ./testing.py -h
+The following path doesn't exist: -h
+Please correct any problems and try again
+----
+
+=== Using argparse
+
+I have written an alternate version of this program using the standard `argparse` module to handle at https://github.com/kyclark/configcode/blob/master/testing/testing.py.
+Most of the above code can be handled using the standard `argparse` module.
+My version will accept one or more input files.
+The program will produce a usage when run with no arguments or the "help" flags:
+
+----
+$ ./testing.py -h
+usage: testing.py [-h] FILE [FILE ...]
+
+Test algorithm
+
+positional arguments:
+  FILE        Input file(s)
+
+optional arguments:
+  -h, --help  show this help message and exit
+----
+
+Any non-file argument is validated and rejected by `argparse`:
+
+----
+$ ./testing.py blarg
+usage: testing.py [-h] FILE [FILE ...]
+testing.py: error: argument FILE: can't open 'blarg': [Errno 2] No such file or directory: 'blarg'
+----
+
+Note that `argparse` will reject any undefined arguments such as `-x`:
+
+----
+$ ./testing.py -x test_input/*
+usage: testing.py [-h] FILE [FILE ...]
+testing.py: error: unrecognized arguments: -x
+----
+
+Here is the relevant section that handles the command-line arguments and usage:
+
+----
+# --------------------------------------------------
+def get_args():
+    """Get command-line arguments"""
+
+    parser = argparse.ArgumentParser(
+        description='Test algorithm',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument('file',
+                        help='Input file(s)',
+                        metavar='FILE',
+                        type=argparse.FileType('r'), <1>
+                        nargs='+') <2>
+
+    return parser.parse_args()
+
+
+# --------------------------------------------------
+def main():
+    """Make a jazz noise here"""
+
+    args = get_args()     <3>
+
+    for fh in args.file:  <4>
+        fh.close()        <5>
+        run_test(fh.name) <6>
+----
+
+<1> This will cause `argparse` to validate that the positional arguments are readable (`'r'`) files.
+<2> The `nargs` is for the "number of arguments," and `+` means "one or more."
+<3> All the parsing and validation of the arguments happens here. If the arguments are invalid in any way, then this line will fail, the usage will be printed, and the program will exit with a non-zero value.
+<4> The `args.file` value will be a `list` of one or more _open file handles_.
+<5> Need to close the file handle for `gdal.Open()` to work.
+<6> Pass the file's name.
 	
 == Author 
 

@@ -5,7 +5,7 @@ Test algorithm_rgb
 
 import algorithm_rgb
 import argparse
-import gdal
+import osgeo.gdal as gdal
 import numpy as np
 import sys
 
@@ -50,9 +50,9 @@ def run_test(filename):
         the file is not an image file.
     """
     try:
-        with gdal.Open(filename) as fh:
+        if fh := gdal.Open(filename):
             # Get the pixels and call the calculation
-            pix = np.array(open_file.ReadAsArray())
+            pix = np.array(fh.ReadAsArray())
             calc_val = algorithm_rgb.calculate(np.rollaxis(pix, 0, 3))
 
             # Check for unsupported types
