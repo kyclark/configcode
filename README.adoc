@@ -828,7 +828,7 @@ That program is merely provided to demonstrate how the original program can be s
 
 I have provided a separate https://github.com/kyclark/configcode/blob/master/testing/test.py that demonstrates how `pytest` can be used to create unit tests for the https://github.com/kyclark/configcode/blob/master/testing/algorithm_rgb.py file.
 
-NOTE: Is it possible for any of the functions to return anything other than a `float`? That is, the tests only use good input files. What would happen if a corrupted file were used or one that could conceivably create values of 0 for R+G+B which I see is used as a denominator in division.
+NOTE: Is it possible for any of the functions to return anything other than a `float`? That is, the tests only use good input files, and I think it's crucial to run tests using known bad values to ensure the code gracefully handles errors. What would happen if a corrupted file were used or one that could conceivably create values of 0 for R+G+B which I see is used as a denominator in division.
 
 Here is a simple testing file which uses two known files (`input1` and `input2`) and verifies that each function in the `algorithm_rgb` will return the correct value:
 
