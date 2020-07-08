@@ -1,7 +1,7 @@
 = Configuration and Testing Ideas for algorithm_rbg.py
 
-A review of `algorithm_rgb.py`.
-
+A review of the code and tests in https://github.com/AgPipeline/transformer-rgb-indices with suggestions for using `pytest` to create unit tests as well as using the `typing` module to create classes/types to more finely describe data.
+	
 == Encoding metainformation
 
 Currently the `algorithm_rbg` uses top-level, global variables to define meta-information about the module, e.g.:
@@ -512,7 +512,7 @@ def print_usage():
 <4> Another instance of needing to skip the first value as this is not actually an argument. 
 <5> Manually checking that a given argument exists which could mean either a directory or a file.
 <6> Recommend always using positive variable names like "is_ok" with default of `True` and setting to `False` when there is a problem so that you can `return is_ok`. The brain has to work extra to work out the negative of `not have_errors`.
-<7> The `argc` variable is used just once. If you change the coee to `if len(sys.argv):` then `pylint` would complain "Do not use `len(SEQUENCE)` without comparison to determine if a sequence is empty (len-as-condition)". The more common idiom would be `if sys.argv:`.
+<7> The `argc` variable is used just once. If you change the code to `if len(sys.argv):` then `pylint` would complain "Do not use `len(SEQUENCE)` without comparison to determine if a sequence is empty (len-as-condition)". The more common idiom would be `if sys.argv:`.
 <8> Given the binary choice, an `if` expression would be better (see below). Also, this code relies on the fact that Python's variable scoping is really terrible. In a stricter language, `our_name` would not be visible after the `if`/`else` block, but in Python it is. Recommend to initialize the variable before the block or better to use an `if` expression.
 <9> Manually printing the usage.
 <10> These 5 separate `print()` calls could be handled with one `print()` where the text is provided using a single triple-quoted (`"""`) string which is more idiomatic.
